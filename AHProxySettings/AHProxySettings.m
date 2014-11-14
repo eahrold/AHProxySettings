@@ -41,7 +41,8 @@ NSString *const kNSProxyHTTPS;
 
 @implementation AHProxySettings {
     NSDictionary *_systemProxies;
-    NSString *_currentURL;
+    NSString *_pacFunction;
+    BOOL _pacFileRetrievalFailed;
 }
 
 @synthesize autoDetectedProxies = _autoDetectedProxies;
@@ -84,11 +85,7 @@ NSString *const kNSProxyHTTPS;
     if (_systemProxies[@"ProxyAutoConfigEnable"] ||
         _systemProxies[@"ProxyAutoDiscoveryEnable"]) {
 
-        if (![_destinationURL isEqualToString:_currentURL] ||
-            !_autoDetectedProxies) {
-
-            // Reset the current URL
-            _currentURL = [NSString stringWithString:_destinationURL];
+        if (!_pacFunction && !_pacFileRetrievalFailed) {
 
             NSString *urlString = _systemProxies[@"ProxyAutoConfigURLString"];
             if (urlString && urlString.length > 0) {
@@ -98,7 +95,7 @@ NSString *const kNSProxyHTTPS;
                      requestWithURL:pacFileURL
                         cachePolicy:
                             NSURLRequestReloadIgnoringLocalAndRemoteCacheData
-                    timeoutInterval:2.0];
+                    timeoutInterval:5.0];
 
                 // Initialize our response and error objects
                 NSHTTPURLResponse *resp;
@@ -111,43 +108,46 @@ NSString *const kNSProxyHTTPS;
                                                       error:&error];
 
                 if (reqData && resp.statusCode < 400) {
-                    NSString *str =
+                    _pacFunction =
                         [[NSString alloc] initWithData:reqData
                                               encoding:NSASCIIStringEncoding];
-
-                    if (str && self.destinationURL) {
-                        CFErrorRef err;
-                        NSURL *url = [NSURL URLWithString:_destinationURL];
-
-                        NSArray *proxies = CFBridgingRelease(
-                            CFNetworkCopyProxiesForAutoConfigurationScript(
-                                (__bridge CFStringRef)(str),
-                                (__bridge CFURLRef)(url),
-                                &err));
-                        if (err) {
-                            NSLog(@"%@", CFBridgingRelease(err));
-                        } else {
-                            NSMutableArray *workingProxies = [NSMutableArray new];
-                            
-                            for (NSDictionary *proxyDict in proxies) {
-                                AHProxy *proxy = [[AHProxy alloc] init];
-                                proxy.server = proxyDict[@"kCFProxyHostNameKey"];
-                                proxy.port =  proxyDict[@"kCFProxyPortNumberKey"];
-
-                                if (proxy.server && proxy.port) {
-                                    [workingProxies addObject:proxy];
-                                }
-                            }
-
-                            if (workingProxies.count) {
-                                _autoDetectedProxies = [NSArray arrayWithArray:workingProxies];
-                            }
-                        }
-                    }
                 } else {
-                    if (error)
-                        NSLog(@"Error getting PAC file: %@",
-                              error.localizedDescription);
+                    _pacFileRetrievalFailed = YES;
+                    NSLog(@"Error retrieving PAC file. %@",error ?
+                          error.localizedDescription:@"");
+                }
+            }
+        }
+
+        if (_pacFunction && self.destinationURL) {
+            CFErrorRef err;
+            NSURL *url = [NSURL URLWithString:_destinationURL];
+
+            NSArray *proxies = CFBridgingRelease(
+                                                 CFNetworkCopyProxiesForAutoConfigurationScript(
+                                                                                                (__bridge CFStringRef)(_pacFunction),
+                                                                                                (__bridge CFURLRef)(url),
+                                                                                                &err));
+            if (err) {
+                NSLog(@"%@", CFBridgingRelease(err));
+            } else {
+                NSMutableArray *workingProxies = [NSMutableArray new];
+
+                for (NSDictionary *proxyDict in proxies) {
+                    AHProxy *proxy = [[AHProxy alloc] init];
+                    proxy.server =
+                    proxyDict[@"kCFProxyHostNameKey"];
+                    proxy.port =
+                    proxyDict[@"kCFProxyPortNumberKey"];
+
+                    if (proxy.server && proxy.port) {
+                        [workingProxies addObject:proxy];
+                    }
+                }
+
+                if (workingProxies.count) {
+                    _autoDetectedProxies =
+                    [NSArray arrayWithArray:workingProxies];
                 }
             }
         }
@@ -217,7 +217,8 @@ NSString *const kNSProxyHTTPS;
         }
     }
 
-    // If there are not keys added to the dictionary yet, skip the exception list
+    // If there are not keys added to the dictionary yet, skip the exception
+    // list
     if ((exportDictionary.count > 0) && self.exceptionsList) {
         NSMutableArray *exceptionList = [[NSMutableArray alloc] init];
 
@@ -225,11 +226,10 @@ NSString *const kNSProxyHTTPS;
         // you can't start with wild cards, instead you specify
         // domain extensions directly (e.g. *.mit.edu is just .mit.edu)
         for (NSString *exception in _exceptionsList) {
-            if (exception.length > 2 && [[exception substringToIndex:2] isEqualToString:@"*."]) {
+            if (exception.length > 2 &&
+                [[exception substringToIndex:2] isEqualToString:@"*."]) {
                 [exceptionList addObject:[exception substringFromIndex:1]];
-            } else {
-                [exceptionList addObject:exception];
-            }
+            } else { [exceptionList addObject:exception]; }
         }
 
         NSString *exceptions = [exceptionList componentsJoinedByString:@","];
@@ -283,40 +283,6 @@ NSString *const kNSProxyHTTPS;
     }
 
     return proxy;
-}
-
-- (NSArray *)pacProxiesAtURL:(NSString *)urlString {
-    NSArray *pacProxies;
-
-    NSURL *url = [NSURL URLWithString:urlString];
-
-    NSURLRequest *req = [NSURLRequest
-         requestWithURL:url
-            cachePolicy:NSURLRequestReloadIgnoringLocalAndRemoteCacheData
-        timeoutInterval:5.0];
-
-    // Initialize our response and error objects
-    NSHTTPURLResponse *resp;
-    NSError *error = nil;
-
-    //
-    NSData *pacData = [NSURLConnection sendSynchronousRequest:req
-                                            returningResponse:&resp
-                                                        error:&error];
-
-    if (resp.statusCode < 400) {
-        NSString *pacFunction =
-            [[NSString alloc] initWithData:pacData
-                                  encoding:NSASCIIStringEncoding];
-
-        pacProxies =
-            CFBridgingRelease(CFNetworkCopyProxiesForAutoConfigurationScript(
-                (__bridge CFStringRef)(pacFunction),
-                (__bridge CFURLRef)(url),
-                NULL));
-    }
-
-    return pacProxies;
 }
 
 @end
