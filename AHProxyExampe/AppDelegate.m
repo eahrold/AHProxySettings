@@ -51,14 +51,9 @@
 - (IBAction)runTaskWithProxy:(NSButton *)sender {
     [self setupTask];
 
-    NSMutableDictionary *env = [[NSMutableDictionary alloc] init];
-    [env addEntriesFromDictionary:[[NSProcessInfo processInfo]environment]];
-
     [_task useSystemProxiesForDestination:_testURL.stringValue];
 
-    for( NSString *k in _task.environment) {
-        NSLog(@"%@",_task.environment[k]);
-    }
+    NSLog(@"%@",_task.environment);
 
     [_task launch];
 }
@@ -79,18 +74,19 @@
     _task.standardOutput = [NSPipe pipe];
     _task.standardError = [NSPipe pipe];
 
-    __weak AppDelegate *weakSelf = self;
+    __weak typeof(self) weakSelf = self;
     [_task setTerminationHandler:^(NSTask *task) {
+        typeof(self) strongSelf = weakSelf;
         if (task.terminationStatus > 0) {
             NSData *data = [[task.standardError fileHandleForReading] readDataToEndOfFile];
             NSString *errString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
             NSLog(@"%@",errString);
-            weakSelf.runStatusTF.stringValue = [NSString stringWithFormat:@"Unable to connect to server [error code:%d]",task.terminationStatus ];
+            strongSelf.runStatusTF.stringValue = [NSString stringWithFormat:@"Unable to connect to server [error code:%d]",task.terminationStatus ];
         } else {
-            weakSelf.runStatusTF.stringValue = @"Successfully connected to server";
+            strongSelf.runStatusTF.stringValue = @"Successfully connected to server";
         }
-        [weakSelf.runButton setEnabled:YES];
-        [weakSelf.runWithoutButton setEnabled:YES];
+        [strongSelf.runButton setEnabled:YES];
+        [strongSelf.runWithoutButton setEnabled:YES];
     }];    
 }
 

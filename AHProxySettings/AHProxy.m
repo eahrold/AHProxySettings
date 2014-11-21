@@ -36,7 +36,7 @@ NSString *urlEncodedString(NSString *string) {
         CFURLCreateStringByAddingPercentEscapes(kCFAllocatorDefault,
                                                 (__bridge CFStringRef)string,
                                                 NULL,
-                                                CFSTR(":/?#[]@!$&’()*+,;="),
+                                                CFSTR(":/?#[]@$&’+,;="),
                                                 kCFStringEncodingUTF8));
     return result;
 }

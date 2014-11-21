@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name = 'AHProxySettings'
-  spec.version = '0.1'
+  spec.version = '0.1.1'
   spec.platform = :osx
   spec.license = 'MIT'
   spec.summary = 'Objective-c lib to easily acquire the current system proxy settings'
