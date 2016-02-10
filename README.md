@@ -42,4 +42,4 @@ task.arguments = @[ @"-k", _testURL.stringValue ];
 // ... then do what you will with the results ... //
 
 ```
-if not using cocoa pods, make sure to include `-ObjC` in you build setting's other linker flags so the category isn't optimized out.
+if not using CocoaPods, make sure to include `-ObjC` in you build setting's other linker flags so the category isn't optimized out.
