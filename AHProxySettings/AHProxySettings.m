@@ -107,7 +107,7 @@ NSString *const kNSProxyHTTPS;
                                           returningResponse:&resp
                                                       error:&error];
 
-                if (reqData && resp.statusCode < 400) {
+                if (reqData && (![resp respondsToSelector:@selector(statusCode)] || resp.statusCode < 400)) {
                     _pacFunction =
                         [[NSString alloc] initWithData:reqData
                                               encoding:NSASCIIStringEncoding];
